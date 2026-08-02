@@ -8,31 +8,29 @@ def clean_speech_bubbles(image):
     img = np.array(image)
     gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
     
-    # 1. كشف التباين العالي (النصوص داخل الفقاعات أو فوق المؤثرات)
-    # استخدام Adaptive Threshold للحصول على دقة عالية جداً لحواف الحروف
-    thresh = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_MEAN_C, 
-                                  cv2.THRESH_BINARY_INV, 15, 10)
+    # 1. كشف دقيق جداً للنصوص السوداء داخل الفقاعات الفاتحة
+    # نستخدم thresholding مضبوط خصيصاً لالتقاط الحروف الغامقة مهما كانت دقيقة
+    _, thresh = cv2.threshold(gray, 200, 255, cv2.THRESH_BINARY_INV)
     
-    # 2. تنظيف الشوائب وتركيز القناع على النصوص فقط دون مسح المؤثرات الكبيرة
-    kernel = np.ones((2, 2), np.uint8)
-    mask = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel)
+    # 2. توسيع حواف النص (Dilation) لضمان مسح كل آثار الحروف القديمة تماماً وجذرها
+    kernel = np.ones((3, 3), np.uint8)
+    mask = cv2.dilate(thresh, kernel, iterations=2)
     
-    # 3. تمديد طفيف جداً للقناع لضمان تغطية حدود الحروف بالكامل
-    mask = cv2.dilate(mask, kernel, iterations=1)
+    # 3. إزالة أي شوائب صغيرة لا تمثل حروفاً
+    mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
     
-    # 4. تخمين الخلفية وإعادة رسمها (Inpainting)
-    # هذه التقنية تأخذ الألوان المحيطة بالنص وتدمجها وتخمن ما وراءه لتعبئته بنفس الخلفية (سواء كانت زرقاء، شفافة، أو متدرجة) بدلاً من اللون الأبيض الصريح
+    # 4. إعادة بناء الخلفية (Inpainting) بذكاء لدمج النص المسحوح مع لون الفقاعة الأساسي
     result = cv2.inpaint(img, mask, inpaintRadius=3, flags=cv2.INPAINT_TELEA)
     
     return result
 
-# واجهة Gradio الاحترافية
+# واجهة Gradio
 demo = gr.Interface(
     fn=clean_speech_bubbles,
     inputs=gr.Image(type="pil", label="ارفع صفحة المانجا/المانهوا"),
-    outputs=gr.Image(type="numpy", label="النتيجة الذكية المخمنة للخلفية"),
-    title="أداة تبييض وتخمين خلفيات المانجا الذكية",
-    description="ارفع الصورة هنا وسيتم إزالة النص وتخمين الخلفية والمؤثرات بدقة عالية"
+    outputs=gr.Image(type="numpy", label="النتيجة المبيضة"),
+    title="أداة تبييض فقاعات المانجا",
+    description="ارفع الصورة هنا لتتم إزالة الكلام تماماً وبشكل ناعم"
 )
 
 if __name__ == "__main__":
