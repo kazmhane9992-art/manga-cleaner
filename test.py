@@ -1,38 +1,27 @@
 import cv2
 import numpy as np
-from PIL import Image
-import gradio as gr
 
-def clean_speech_bubbles(input_img):
-    if input_img is None:
-        return None
+def clean_speech_bubbles(image):
+    img = np.array(image)
+    gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
     
-    # تحويل الصورة إلى صيغة OpenCV
-    image = cv2.cvtColor(np.array(input_img), cv2.COLOR_RGB2BGR)
-
-    # معالجة الصورة وتحديد الفقاعات
-    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    _, thresh = cv2.threshold(gray, 230, 255, cv2.THRESH_BINARY)
+    # 1. عزل المساحات البيضاء الساطعة جداً (الفقاعات)
+    _, thresh = cv2.threshold(gray, 235, 255, cv2.THRESH_BINARY)
+    
+    # 2. إيجاد حدود الأشكال المغلقة في الصورة
     contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-
+    
+    mask = np.zeros_like(gray)
+    
     for cnt in contours:
-        if cv2.contourArea(cnt) > 1000:
-            cv2.drawContours(image, [cnt], -1, (255, 255, 255), thickness=cv2.FILLED)
-
-    # إرجاع الصورة المبيضة بصيغة RGB
-    return cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-
-# بناء واجهة الموقع
-demo = gr.Interface(
-    fn=clean_speech_bubbles,
-    inputs=gr.Image(type="pil", label="ارفع صفحة المانجا/المانهوا"),
-    outputs=gr.Image(type="numpy", label="النتيجة المبيضة"),
-    title="أداة تبييض الصفحات التلقائية",
-    description="ارفع الصورة هنا وسيتم تبييض فقاعات الكلام فوراً."
-)
-
-import os
-
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 7860))
+        area = cv2.contourArea(cnt)
+        # فلترة المساحات: استهداف الفقاعات الكبيرة وتجاهل المؤثرات الصغيرة
+        if area > 800:  
+            cv2.drawContours(mask, [cnt], -1, 255, -1)
+            
+    # 3. تبييض داخل الفقاعات المحددة فقط وتفريغ النص
+    result = img.copy()
+    result[mask == 255] = [255, 255, 255]
+    
+    return result    port = int(os.environ.get("PORT", 7860))
     demo.launch(server_name="0.0.0.0", server_port=port)
